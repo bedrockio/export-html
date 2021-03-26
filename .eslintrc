@@ -1,0 +1,14 @@
+{
+  "env": {
+    "node": true
+  },
+  "extends": ["plugin:bedrock/recommended"],
+  "rules": {
+    "no-console": [
+      "warn",
+      {
+        "allow": ["warn", "error", "info"]
+      }
+    ]
+  }
+}
