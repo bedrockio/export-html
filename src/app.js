@@ -73,7 +73,11 @@ router.post(
     const browser = await getBrowser();
     const page = await browser.newPage();
     await page.setContent(body.html, { waitUntil: "load" });
-    ctx.body = await page.screenshot(body.export);
+    const options = body.export;
+    if (options.type === "png") {
+      delete options.quality;
+    }
+    ctx.body = await page.screenshot(options);
     await page.close();
   }
 );
