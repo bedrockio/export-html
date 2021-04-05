@@ -2,7 +2,7 @@
 
 This is a simple Docker container that runs a JSON API service that allows HTML to be converted to PDF or PNG/JPG images. This service accomplishes this by using a [Chrome headless browser](https://github.com/GoogleChrome/puppeteer) to ensure full rendering capabilities on par with Google Chrome.
 
-_Security Note: This is intended to run as a micro service - not directly exposed to the public internet_
+_Security Note: This is intended to run as a micro service - do not directly expose to the public internet_
 
 ## Usage
 
@@ -31,6 +31,16 @@ curl \
 
 Now open `hello.pdf`
 
+The default format is "Letter" (US) but it can be set to other paper formats like so:
+
+```bash
+curl \
+-d '{"html": "<h1>Hello World</h1>", "export": {"format": "A4"}}' \
+-H "Content-Type: application/json" \
+--output hello-a4.pdf \
+-XPOST "http://localhost:2305/1/pdf"
+```
+
 ## Generating a PNG
 
 ```bash
@@ -41,11 +51,14 @@ curl \
 -XPOST "http://localhost:2305/1/screenshot"
 ```
 
+Now open `hello.png`
+
 ## Advanced Options
 
-For the `POST /1/screenshot` API call you can use the [following Puppeteer options](https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagescreenshotoptions) under the `body.export` object.
+Each API call allows Puppeteer options via `body.export`
 
-For the `POST /1/pdf` you can use the [following Puppeteer options](https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagepdfoptions).
+- [POST /1/pdf](https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagepdfoptions)
+- [POST /1/screenshot](https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagescreenshotoptions)
 
 ## Kubernetes Deployment Notes
 
