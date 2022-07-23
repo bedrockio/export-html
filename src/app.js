@@ -73,7 +73,14 @@ router.post(
     const body = ctx.request.body;
     const browser = await getBrowser();
     const page = await browser.newPage();
-    await page.setContent(body.html, { waitUntil: "load" });
+
+    let html = body.html;
+    if(body.base64) {
+      let buffer = Buffer.from(html, 'base64');
+      html = buffer.toString('ascii');
+    }
+
+    await page.setContent(html, { waitUntil: "load" });
     const options = body.export;
     if (options.type === "png") {
       delete options.quality;
