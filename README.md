@@ -60,6 +60,15 @@ Each API call allows Puppeteer options via `body.export`
 - [POST /1/pdf](https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagepdfoptions)
 - [POST /1/screenshot](https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagescreenshotoptions)
 
+## Kubernetes helm-chart Deployment
+There is a helm-chart available to install this application to Kubernetes. Checkout this [GitHub Repo](https://github.com/SERGO-GMBH/export-html-helm) for more information.
+
+```
+helm repo add sergo-export-html https://sergo-gmbh.github.io/export-html-helm/
+
+helm upgrade --install html-export sergo-export-html/html-export
+```
+
 ## Kubernetes Deployment Notes
 
 This module runs a full browser and each request will open a virtual broeser tab. Many concurrent requests can increase memory usage signicantly.
