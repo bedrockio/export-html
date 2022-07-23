@@ -52,6 +52,7 @@ router.post(
   validate({
     body: Joi.object({
       html: Joi.string().required(),
+      base64: Joi.boolean().default(false),
       export: Joi.object({
         scale: Joi.number().min(0.1).max(2).default(1),
         type: Joi.string().allow("jpeg", "png").default("png"),
@@ -88,6 +89,7 @@ router.post(
   validate({
     body: Joi.object({
       html: Joi.string().required(),
+      base64: Joi.boolean().default(false),
       export: Joi.object({
         scale: Joi.number().default(1),
         displayHeaderFooter: Joi.boolean().default(true),
@@ -128,7 +130,13 @@ router.post(
     const browser = await getBrowser();
     const page = await browser.newPage();
 
-    await page.setContent(body.html, { waitUntil: "load" });
+    let html = body.html;
+    if(body.base64) {
+      let buffer = Buffer.from(html, 'base64');
+      html = buffer.toString('ascii');
+    }
+
+    await page.setContent(html, { waitUntil: "load" });
     ctx.body = await page.pdf(body.export);
     await page.close();
   }
