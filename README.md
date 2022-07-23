@@ -37,9 +37,19 @@ The default format is "Letter" (US) but it can be set to other paper formats lik
 curl \
 -d '{"html": "<h1>Hello World</h1>", "export": {"format": "A4"}}' \
 -H "Content-Type: application/json" \
+--output hello-base64.pdf \
+-XPOST "http://localhost:2305/1/pdf"
+```
+
+For larger and more a more complex payload it might be easier to send the data as base64 string:
+```bash
+curl \
+-d '{"html": "PGI+aGVsbG8gd29ybGQgPGltZyBzcmM9Imh0dHBzOi8vd3d3LnBsYWNlYmVhci5jb20vNDAwLzMwMCIgLz48L2I+", "base64": true, "export": {"format": "A4"}}' \
+-H "Content-Type: application/json" \
 --output hello-a4.pdf \
 -XPOST "http://localhost:2305/1/pdf"
 ```
+
 
 ## Generating a PNG
 
@@ -52,6 +62,15 @@ curl \
 ```
 
 Now open `hello.png`
+
+The screenshot endpoint also has the option to send data as base64:
+```bash
+curl \
+-d '{"html": "PGI+aGVsbG8gd29ybGQgPGltZyBzcmM9Imh0dHBzOi8vd3d3LnBsYWNlYmVhci5jb20vNDAwLzMwMCIgLz48L2I+", "base64": true, "export": {"type": "png"}}' \
+-H "Content-Type: application/json" \
+--output hello-base64.png \
+-XPOST "http://localhost:2305/1/screenshot"
+```
 
 ## Advanced Options
 
