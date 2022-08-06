@@ -1,0 +1,17 @@
+name: Docker Image Test
+
+on: pull_request
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build application
+        run: docker-compose up --build -d 
+      - name: Test application
+        run: docker run --network container:docuprinter appropriate/curl -s --retry 10 --retry-connrefused http://localhost:2305/
+      - name: Test application pdf
+        run: docker run --network container:docuprinter appropriate/curl -s --retry 2 --retry-connrefused -X POST -H "Accept:application/json" -H "Content-type:application/json" -d '{"html":"<b>hello world <img src=\"https://www.placebear.com/400/300\"/></b>"}' http://localhost:2305/1/pdf --output test.pdf
+      - name: Test application image
+        run: docker run --network container:docuprinter appropriate/curl -s --retry 2 --retry-connrefused -X POST -H "Accept:application/json" -H "Content-type:application/json" -d '{"html":"<b>hello world <img src=\"https://www.placebear.com/400/300\"/></b>"}' http://localhost:2305/1/screenshot --output test.png

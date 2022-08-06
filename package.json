@@ -1,6 +1,6 @@
 {
-  "name": "@bedrockio/export-html",
-  "version": "1.0.1",
+  "name": "@sergogmbh/docuprinter",
+  "version": "1.0.0-pre",
   "license": "MIT",
   "engines": {
     "node": ">=14"

@@ -1,8 +1,8 @@
 version: "3.7"
 
 services:
-  export-html:
-    container_name: export-html
+  docuprinter:
+    container_name: docuprinter
     build:
       context: .
       dockerfile: Dockerfile

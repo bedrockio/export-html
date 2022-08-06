@@ -21,6 +21,11 @@ jobs:
       run: |
         docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
         
+    - name: 'change version'
+      uses: reedyuk/npm-version@1.1.1
+      with:
+        version: '${{ github.ref_name }}'
+
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag sergogmbh/docuprinter:${{ github.ref_name }} --tag sergogmbh/docuprinter:latest
 
