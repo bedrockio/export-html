@@ -47,14 +47,42 @@ router.get("/check-status", async (ctx) => {
 });
 
 // https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagescreenshotoptions
+router.get(
+  "/1/screenshot",
+  validate({
+    query: Joi.object({
+      url: Joi.string().required(),
+      type: Joi.string().allow("jpeg", "png", "webp").default("png"),
+    }),
+  }),
+  async (ctx) => {
+    const query = ctx.request.query;
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+
+    await page.goto(query.url, { waitUntil: "load" });
+    
+    const options = {
+      type: query.type
+    };
+
+    ctx.response.set("content-type", `image/${query.type}`);
+    ctx.body = await page.screenshot(options);
+
+    await page.close();
+  }
+);
+
+// https://pptr.dev/#?product=Puppeteer&version=v8.0.0&show=api-pagescreenshotoptions
 router.post(
   "/1/screenshot",
   validate({
     body: Joi.object({
-      html: Joi.string().required(),
+      html: Joi.string(),
+      url: Joi.string(),
       export: Joi.object({
         scale: Joi.number().min(0.1).max(2).default(1),
-        type: Joi.string().allow("jpeg", "png").default("png"),
+        type: Joi.string().allow("jpeg", "png", "webp").default("png"),
         quality: Joi.number().min(0).max(100).default(100),
         fullPage: Joi.boolean().default(true),
         clip: Joi.object({
@@ -66,18 +94,26 @@ router.post(
         omitBackground: Joi.boolean().default(false),
         encoding: Joi.string().allow("base64", "binary").default("binary"),
       }),
-    }),
+    }).or('html', 'url'),
   }),
   async (ctx) => {
     const body = ctx.request.body;
     const browser = await getBrowser();
     const page = await browser.newPage();
-    await page.setContent(body.html, { waitUntil: "load" });
+    
+    if(body.url) {
+      await page.goto(body.url, { waitUntil: "load" });
+    } else {
+      await page.setContent(body.html, { waitUntil: "load" });
+    }
+    
     const options = body.export;
     if (options.type === "png") {
       delete options.quality;
     }
+    ctx.response.set("content-type", `image/${options.type}`);
     ctx.body = await page.screenshot(options);
+
     await page.close();
   }
 );

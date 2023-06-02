@@ -18,7 +18,7 @@
     "joi": "^17.4.0",
     "koa": "^2.13.1",
     "koa-body": "^4.2.0",
-    "puppeteer": "5.4"
+    "puppeteer": "20.5.0"
   },
   "devDependencies": {
     "eslint": "^7.23.0",
