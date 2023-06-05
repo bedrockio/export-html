@@ -1,6 +1,6 @@
 const Router = require("@koa/router");
 const Koa = require("koa");
-const bodyParser = require("koa-body");
+const { koaBody } = require('koa-body');
 const validate = require("./utils/middleware/validate");
 const errorHandler = require("./utils/middleware/error-handler");
 const Sentry = require("@sentry/node");
@@ -25,7 +25,7 @@ if (
 }
 
 app
-  .use(bodyParser({ multipart: true }))
+  .use(koaBody({ multipart: true }))
   .use(loggingMiddleware())
   .use(errorHandler);
 

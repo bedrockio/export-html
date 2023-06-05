@@ -11,20 +11,20 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@bedrockio/config": "^2.0.4",
-    "@bedrockio/instrumentation": "^1.4.3",
-    "@koa/router": "^10.0.0",
-    "@sentry/node": "^6.2.3",
-    "joi": "^17.4.0",
-    "koa": "^2.13.1",
-    "koa-body": "^4.2.0",
+    "@bedrockio/config": "^2.2.2",
+    "@bedrockio/instrumentation": "^1.4.18",
+    "@koa/router": "^12.0.0",
+    "@sentry/node": "^7.54.0",
+    "joi": "^17.9.2",
+    "koa": "^2.14.2",
+    "koa-body": "^6.0.1",
     "puppeteer": "20.5.0"
   },
   "devDependencies": {
-    "eslint": "^7.23.0",
-    "eslint-plugin-bedrock": "^1.0.0",
-    "prettier": "^2.2.1",
-    "prettier-eslint": "^12.0.0"
+    "eslint": "^8.42.0",
+    "eslint-plugin-bedrock": "^1.0.24",
+    "prettier": "^2.8.8",
+    "prettier-eslint": "^15.0.1"
   },
   "volta": {
     "node": "14.15.1",

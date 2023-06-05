@@ -5,11 +5,10 @@ async function getBrowserWebsocket() {
   if (browserWSEndpoint) return browserWSEndpoint;
 
   const browser = await puppeteer.launch({
-    ...(process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-      ? { executablePath: "/usr/bin/chromium-browser" }
-      : {}),
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
-    headless: "new"
+    devtools: false,
+    dumpio: false, // TURN THIS ON IF puppeteer.launch() is stuck without details
+    headless: 'new'
   });
 
   browserWSEndpoint = browser.wsEndpoint();

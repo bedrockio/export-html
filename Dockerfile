@@ -1,38 +1,27 @@
-FROM node:16.3.0-alpine
+# THIS DOCKER FILES SOLVES THE ISSUE OF puppeteer.launch() BEING STUCK WITHOUT ANY ERROR MESSAGE ON MAC
+# SOLUTION FROM https://github.com/puppeteer/puppeteer/issues/7746#issuecomment-1337583474
 
-ARG NODE_ENV=production
-
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    nodejs \
-    yarn
+FROM node:16.18-bullseye-slim AS development
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
+RUN apt-get update \
+    && apt-get install -y chromium \
+    fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
+    --no-install-recommends
+
+ARG NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 COPY package.json /service/package.json
 COPY yarn.lock /service/yarn.lock
 
 RUN cd /service; yarn install;
 
-RUN echo chromium-browser --version
-
-# Copy app source
-COPY . /service
-
-# Set work directory to /api
+COPY . ./service
 WORKDIR /service
 
-# set your port
-ENV PORT 2305
+RUN npm install
 
-# expose the port to outside world
-EXPOSE 2305
-
-# start command as per package.json
-CMD ["node", "src/index"]
+CMD ["npm", "start"]
