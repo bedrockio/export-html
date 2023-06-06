@@ -27,7 +27,8 @@ if (
 app
   .use(koaBody({ multipart: true }))
   .use(loggingMiddleware())
-  .use(errorHandler);
+  .use(errorHandler)
+  .use(require('koa-simple-healthcheck')());
 
 const router = new Router();
 app.router = router;

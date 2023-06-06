@@ -2538,6 +2538,11 @@ koa-convert@^2.0.0:
     co "^4.6.0"
     koa-compose "^4.1.0"
 
+koa-simple-healthcheck@^0.0.1:
+  version "0.0.1"
+  resolved "https://registry.yarnpkg.com/koa-simple-healthcheck/-/koa-simple-healthcheck-0.0.1.tgz#8b86b418715e4744c1fb5c202593fa0fdd0de7b5"
+  integrity sha512-01XPvhjq5YFE63vdZamWfEX6S6Vjojpo1OOlr8kOOENzzBFcrVMbwn4o74R4AQN8jwDrgHbjaqOFCqCdxS8Yew==
+
 koa@^2.14.2:
   version "2.14.2"
   resolved "https://registry.yarnpkg.com/koa/-/koa-2.14.2.tgz#a57f925c03931c2b4d94b19d2ebf76d3244863fc"
