@@ -55,6 +55,7 @@ router.post(
         type: yd.string().allow("jpeg", "png", "webp").default("png"),
         quality: yd.number().min(0).max(100).default(100),
         fullPage: yd.boolean().default(true),
+        fromSurface: yd.boolean().default(true),
         clip: yd.object({
           x: yd.number(),
           y: yd.number(),
@@ -63,6 +64,14 @@ router.post(
         }),
         omitBackground: yd.boolean().default(false),
         encoding: yd.string().allow("base64", "binary").default("binary"),
+        viewport: yd.object({
+          width: yd.number().default(800),
+          height: yd.number().default(600),
+          deviceScaleFactory: yd.number().default(1),
+          hasTouch: yd.boolean().default(false),
+          isLandscape: yd.boolean().default(false),
+          isMobile: yd.boolean().default(false),
+        }),
       })
       .default({
         scale: 1,
@@ -77,6 +86,11 @@ router.post(
     const body = ctx.request.body;
     const browser = await getBrowser();
     const page = await browser.newPage();
+
+    if (body.export.viewport) {
+      await page.setViewport(body.export.viewport);
+      delete body.export.viewport;
+    }
 
     if (body.url) {
       await page.goto(body.url, { waitUntil: "load" });
