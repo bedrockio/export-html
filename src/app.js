@@ -83,6 +83,10 @@ router.post(
     } else {
       await page.setContent(body.html, { waitUntil: "load" });
     }
+    // Wait for all fonts to be loaded
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
     const options = body.export;
     if (options.type === "png") {
       delete options.quality;
