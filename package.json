@@ -28,5 +28,8 @@
   "volta": {
     "node": "20.12.2",
     "yarn": "1.22.19"
+  },
+  "resolutions": {
+    "@grpc/grpc-js": "1.10.12"
   }
 }

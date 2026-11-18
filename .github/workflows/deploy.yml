@@ -1,0 +1,92 @@
+name: Deploy (Invoke)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [production]
+      tag:
+        description: "Optional image tag (defaults to short SHA)"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_LOGIN_NAME: claimtouch
+      REGISTRY_FQDN: claimtouch.azurecr.io
+      IMAGE_REPO: claimtouch/export-html-pdf
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: az acr login --name "$REGISTRY_LOGIN_NAME"
+
+      - name: Build and push image
+        id: buildpush
+        env:
+          TAG_INPUT: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          COMMIT_SHA=$(git rev-parse HEAD)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          IMAGE_TAG="${TAG_INPUT:-$SHORT_SHA}"
+          IMAGE_REF="$REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG"
+
+          docker build --platform linux/amd64 \
+            --label org.opencontainers.image.revision="$COMMIT_SHA" \
+            --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" \
+            -t "$IMAGE_REF" .
+
+          docker push "$IMAGE_REF"
+
+          docker pull "$IMAGE_REF" >/dev/null
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_REF" | awk -F@ '{print $2}')"
+          IMAGE_REF_DIGEST="$REGISTRY_FQDN/$IMAGE_REPO@${DIGEST}"
+
+          {
+            echo "IMAGE_TAG=$IMAGE_TAG"
+            echo "IMAGE_DIGEST=$DIGEST"
+            echo "IMAGE_REF_DIGEST=$IMAGE_REF_DIGEST"
+            echo "REVISION_SUFFIX=sha-${SHORT_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Deploy container apps
+        env:
+          DIGEST_REF: ${{ steps.buildpush.outputs.IMAGE_REF_DIGEST }}
+          REV_SUFFIX: ${{ steps.buildpush.outputs.REVISION_SUFFIX }}
+          IMAGE_DIGEST: ${{ steps.buildpush.outputs.IMAGE_DIGEST }}
+        run: |
+          set -euo pipefail
+
+          deploy_one() {
+            local name="$1"
+            local rg="$2"
+            echo "Deploying ${DIGEST_REF} to $name in $rg (revision: ${REV_SUFFIX})"
+            az containerapp update \
+              --name "$name" \
+              --resource-group "$rg" \
+              --image "${DIGEST_REF}" \
+              --revision-suffix "${REV_SUFFIX}" \
+              --set-env-vars IMAGE_DIGEST="${IMAGE_DIGEST}"
+          }
+
+          deploy_one "export-html-pdf" "claimtouch-production"
+          deploy_one "ct-cta-prod-htmlpdf-eus" "ct-cta-prod-rg-eus"
