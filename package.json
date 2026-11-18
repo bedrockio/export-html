@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "start:production": "node src/index",
-    "lint": "eslint src"
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src"
   },
   "dependencies": {
     "@bedrockio/config": "^2.2.3",
