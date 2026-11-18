@@ -24,8 +24,6 @@ Platform resources (resource groups, networking, CAE, ACR, monitoring, DR) live 
 | qa | `ct-claims-qa-rg-eus` | `ct-claims-qa-cae-eus` | `ct-cta-qa-htmlpdf-eus` |
 | prod | `ct-cta-prod-rg-eus` | `ct-cta-prod-cae-eus` | `ct-cta-prod-htmlpdf-eus` |
 
-Legacy production app `export-html-pdf` in `claimtouch-production` is not the deploy target; use `ct-cta-prod-htmlpdf-eus`.
-
 ## Layout
 
 | Path | Purpose |
