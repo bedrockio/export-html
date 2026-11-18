@@ -10,3 +10,5 @@ logs
 yarn-error.log*
 test.png
 test.pdf
+infra
+scripts

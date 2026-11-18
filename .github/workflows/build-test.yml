@@ -1,0 +1,67 @@
+name: Build and Test
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+      - release/**
+      - develop
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print workflow context
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          echo "Event:        ${{ github.event_name }}"
+          echo "Actor:        ${{ github.actor }}"
+          echo "Repository:   ${{ github.repository }}"
+          echo "Run:          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "PR number:    ${PR_NUMBER}"
+          echo "PR head ref:  ${PR_HEAD_REF}"
+          echo "PR head SHA:  ${PR_HEAD_SHA}"
+          echo "Base ref:     ${{ github.base_ref }}"
+          echo "Ref:          ${{ github.ref }}"
+          echo "SHA:          ${{ github.sha }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Verify patched @grpc/grpc-js
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('@grpc/grpc-js/package.json').version")"
+          echo "Resolved @grpc/grpc-js@$VERSION"
+          node -e "
+            const [maj, min, pat] = process.argv[1].split('.').map(Number);
+            if (maj !== 1 || min !== 10 || pat < 12) {
+              console.error('Expected @grpc/grpc-js >= 1.10.12, got', process.argv[1]);
+              process.exit(1);
+            }
+          " "$VERSION"

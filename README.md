@@ -4,7 +4,10 @@ Claimtouch fork of [`bedrockio/export-html`](https://github.com/bedrockio/export
 
 `claimtouch.azurecr.io/claimtouch/export-html-pdf`
 
-Used by the `export-html-pdf` / `ct-cta-prod-htmlpdf-eus` Azure Container Apps.
+Production deploy target: `ct-cta-prod-htmlpdf-eus` in `ct-cta-prod-rg-eus`.
+
+- **This repo**: app code, Container App Bicep, image build/deploy GitHub Actions
+- **Platform** (RG/CAE/VNet/ACR/DR): [`claimtouch/infra`](https://github.com/claimtouch/infra)
 
 ## Security notes
 
@@ -134,16 +137,20 @@ spec:
 This service is based on the excellent [Puppeteer module](https://github.com/GoogleChrome/puppeteer)
 
 
-## Deploy (Claimtouch)
 
-Build and push locally:
+## Azure deploy (Claimtouch)
+
+App-level Bicep lives in [`infra/`](infra/README.md). First-time Container App create:
 
 ```bash
-az acr login --name claimtouch
-SHORT_SHA=$(git rev-parse --short HEAD)
-IMAGE=claimtouch.azurecr.io/claimtouch/export-html-pdf:$SHORT_SHA
-docker build --platform linux/amd64 -t "$IMAGE" .
-docker push "$IMAGE"
+./scripts/azure-setup.sh
 ```
 
-Or run the **Deploy (Invoke)** GitHub Actions workflow (requires Azure OIDC secrets).
+Image updates go through **Deploy (Invoke)** (OIDC → ACR → Container App by digest). Typical flow:
+
+1. PR runs **Build and Test**
+2. Signed tag `v*.*.*` runs **Verify Tag Signature**
+3. Stage/qa: Deploy with environment + branch `ref`
+4. Production: Deploy with environment `production` + tag `vX.Y.Z`
+
+Platform recreate / RBAC / DR: see [`claimtouch/infra`](https://github.com/claimtouch/infra).

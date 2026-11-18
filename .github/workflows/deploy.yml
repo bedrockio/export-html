@@ -4,30 +4,179 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Target environment"
+        description: "Target environment (stage, qa, or production)"
         required: true
         type: choice
-        options: [production]
+        options: [stage, qa, production]
       tag:
-        description: "Optional image tag (defaults to short SHA)"
+        description: "Tag name (for production deploys). Leave empty for staging or qa."
         required: false
+        type: string
+      ref:
+        description: "Git reference (branch for staging or qa). e.g. release/v1.5.0"
+        required: false
+        type: string
+      location:
+        description: "Azure region (e.g. eastus). Must match azure-naming.sh."
+        required: false
+        default: eastus
         type: string
 
 permissions:
   id-token: write
   contents: read
+  packages: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     env:
       REGISTRY_LOGIN_NAME: claimtouch
       REGISTRY_FQDN: claimtouch.azurecr.io
       IMAGE_REPO: claimtouch/export-html-pdf
 
     steps:
-      - name: Checkout
+      - name: Print workflow inputs & context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event:        ${{ github.event_name }}"
+          echo "Actor:        ${{ github.actor }}"
+          echo "Repository:   ${{ github.repository }}"
+          echo "Run:          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Ref:          ${{ github.ref }}"
+          echo "Ref name:     ${{ github.ref_name }}"
+          echo "SHA:          ${{ github.sha }}"
+          echo ""
+          echo "Inputs (workflow_dispatch):"
+          echo "  environment='${{ github.event.inputs.environment }}'"
+          echo "  tag='${{ github.event.inputs.tag }}'"
+          echo "  ref='${{ github.event.inputs.ref }}'"
+          echo "  location='${{ github.event.inputs.location }}'"
+
+      - name: Validate deploy inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          TAG="${{ github.event.inputs.tag }}"
+          REF="${{ github.event.inputs.ref }}"
+
+          if [ "$ENVIRONMENT" = "production" ] && [ -z "${TAG}" ]; then
+            echo "❌ Production deploy requires a tag input (e.g. v1.2.3)."
+            exit 1
+          fi
+
+          if [ "$ENVIRONMENT" = "production" ] && ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Production tag must match v*.*.* (e.g. v1.2.3)."
+            exit 1
+          fi
+
+          if [ "$ENVIRONMENT" != "production" ] && [ -n "${TAG}" ]; then
+            echo "❌ Tag input is only valid for production deploys. For stage or qa, leave tag empty and use ref (branch) instead."
+            exit 1
+          fi
+
+          safe_pattern='^[a-zA-Z0-9._/+-]*$'
+          if [ -n "${TAG}" ] && ! echo "$TAG" | grep -Eq "$safe_pattern"; then
+            echo "❌ Invalid tag characters."
+            exit 1
+          fi
+          if [ -n "${REF}" ] && ! echo "$REF" | grep -Eq "$safe_pattern"; then
+            echo "❌ Invalid ref characters."
+            exit 1
+          fi
+
+      - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.environment == 'production' && github.event.inputs.tag && format('refs/tags/{0}', github.event.inputs.tag) || github.event.inputs.ref || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Isolate GnuPG home
+        if: github.event.inputs.environment == 'production'
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+
+      - name: Import public GPG keys (allowlist)
+        if: github.event.inputs.environment == 'production'
+        run: |
+          if [ -z "${{ secrets.GPG_PUBLIC_KEYS }}" ]; then
+            echo "❌ Missing GPG_PUBLIC_KEYS secret"
+            exit 1
+          fi
+          echo "${{ secrets.GPG_PUBLIC_KEYS }}" | gpg --batch --import -
+          echo "Imported keys:"
+          gpg --list-keys --keyid-format LONG
+
+      - name: Verify tag signature and signer allowlist
+        if: github.event.inputs.environment == 'production'
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag }}
+          ALLOWED_GPG_FPRS: ${{ secrets.ALLOWED_GPG_FPRS }}
+        run: |
+          set -euo pipefail
+          echo "Verifying tag $TAG_NAME..."
+
+          git fetch --prune --tags --force || true
+
+          if ! git cat-file -t "$TAG_NAME" | grep -qx "tag"; then
+            echo "❌ $TAG_NAME is not an annotated/signed tag (did you use 'git tag -s'?)."
+            exit 1
+          fi
+
+          OUT="$(git tag -v "$TAG_NAME" 2>&1 || true)"
+          echo "$OUT"
+
+          echo "$OUT" | grep -q "Good signature from" || { echo "❌ Invalid or unsigned tag"; exit 1; }
+
+          SIG_FPR="$(printf "%s" "$OUT" | awk -F': ' '/^Primary key fingerprint:/ {gsub(" ","",$2); print toupper($2); exit}')"
+          if [ -z "${SIG_FPR:-}" ]; then
+            echo "❌ Could not extract signer fingerprint from verification output."
+            exit 1
+          fi
+          echo "Signer fingerprint: $SIG_FPR"
+
+          if [ -z "${ALLOWED_GPG_FPRS:-}" ]; then
+            echo "❌ Missing ALLOWED_GPG_FPRS secret"
+            exit 1
+          fi
+          echo "$ALLOWED_GPG_FPRS" \
+            | tr ',' '\n' \
+            | sed '/^$/d' \
+            | awk '{gsub(" ",""); print toupper($0)}' \
+            > allowed.txt
+
+          echo "Allowed fingerprints:"
+          cat allowed.txt
+
+          if grep -qx "$SIG_FPR" allowed.txt; then
+            echo "✅ Signer is in allowlist."
+          else
+            echo "❌ Signer $SIG_FPR not in allowlist."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+
+      - name: Install and lint
+        run: |
+          set -euo pipefail
+          yarn install --frozen-lockfile
+          yarn lint
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -36,57 +185,108 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Log in to ACR
+      - name: Log in to ACR using current Azure identity
         run: az acr login --name "$REGISTRY_LOGIN_NAME"
 
-      - name: Build and push image
+      - name: Build and push Docker image (with OCI labels) + resolve digest
         id: buildpush
+        shell: bash
         env:
-          TAG_INPUT: ${{ github.event.inputs.tag }}
+          REGISTRY_FQDN: ${{ env.REGISTRY_FQDN }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
         run: |
           set -euo pipefail
+
           COMMIT_SHA=$(git rev-parse HEAD)
           SHORT_SHA=$(git rev-parse --short HEAD)
-          IMAGE_TAG="${TAG_INPUT:-$SHORT_SHA}"
-          IMAGE_REF="$REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG"
+
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          if [ "$ENVIRONMENT" = "production" ]; then
+            IMAGE_TAG="${{ github.event.inputs.tag }}"
+          else
+            IMAGE_TAG="$COMMIT_SHA"
+          fi
+
+          if echo "$IMAGE_TAG" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            VERSION_FOR_APP="$(echo "$IMAGE_TAG" | sed 's/^v//')"
+          else
+            VERSION_FOR_APP="sha-${SHORT_SHA}"
+          fi
+
+          CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          SOURCE_URL="https://github.com/${{ github.repository }}"
+
+          echo "Using IMAGE_TAG=$IMAGE_TAG"
+          echo "App VERSION=$VERSION_FOR_APP"
+          echo "Commit SHA=$COMMIT_SHA"
 
           docker build --platform linux/amd64 \
+            --label org.opencontainers.image.created="$CREATED" \
+            --label org.opencontainers.image.source="$SOURCE_URL" \
             --label org.opencontainers.image.revision="$COMMIT_SHA" \
-            --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" \
-            -t "$IMAGE_REF" .
+            --label org.opencontainers.image.ref.name="$IMAGE_TAG" \
+            --label org.opencontainers.image.version="$VERSION_FOR_APP" \
+            -t "$REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG" .
 
-          docker push "$IMAGE_REF"
+          docker push "$REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG"
 
-          docker pull "$IMAGE_REF" >/dev/null
-          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_REF" | awk -F@ '{print $2}')"
+          LATEST_ENV_TAG="latest-${ENVIRONMENT}"
+          echo "Also tagging and pushing ${LATEST_ENV_TAG}"
+          docker tag "$REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG" \
+            "$REGISTRY_FQDN/$IMAGE_REPO:$LATEST_ENV_TAG"
+          docker push "$REGISTRY_FQDN/$IMAGE_REPO:$LATEST_ENV_TAG"
+
+          docker pull "$REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG" >/dev/null
+          DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "$REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG" | awk -F@ '{print $2}')"
+          if [ -z "${DIGEST:-}" ]; then
+            echo "Failed to resolve image digest for $REGISTRY_FQDN/$IMAGE_REPO:$IMAGE_TAG"
+            exit 1
+          fi
           IMAGE_REF_DIGEST="$REGISTRY_FQDN/$IMAGE_REPO@${DIGEST}"
+          echo "Resolved digest: $DIGEST"
+
+          if echo "$IMAGE_TAG" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            BASE="$(echo "$IMAGE_TAG" | sed 's/^v//; s/\./-/g')"
+            if echo "$IMAGE_TAG" | grep -q '^v'; then REV_BASE="v${BASE}"; else REV_BASE="$BASE"; fi
+          else
+            REV_BASE="sha-${SHORT_SHA}"
+          fi
+          REV_SUFFIX="${REV_BASE}-${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}"
 
           {
             echo "IMAGE_TAG=$IMAGE_TAG"
             echo "IMAGE_DIGEST=$DIGEST"
             echo "IMAGE_REF_DIGEST=$IMAGE_REF_DIGEST"
-            echo "REVISION_SUFFIX=sha-${SHORT_SHA}"
+            echo "REVISION_SUFFIX=$REV_SUFFIX"
+            echo "VERSION=$VERSION_FOR_APP"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Deploy container apps
+      - name: Deploy to Azure Container App (by digest, with revision suffix)
+        id: deploy
+        shell: bash
         env:
           DIGEST_REF: ${{ steps.buildpush.outputs.IMAGE_REF_DIGEST }}
           REV_SUFFIX: ${{ steps.buildpush.outputs.REVISION_SUFFIX }}
+          VERSION: ${{ steps.buildpush.outputs.VERSION }}
           IMAGE_DIGEST: ${{ steps.buildpush.outputs.IMAGE_DIGEST }}
         run: |
           set -euo pipefail
 
-          deploy_one() {
-            local name="$1"
-            local rg="$2"
-            echo "Deploying ${DIGEST_REF} to $name in $rg (revision: ${REV_SUFFIX})"
-            az containerapp update \
-              --name "$name" \
-              --resource-group "$rg" \
-              --image "${DIGEST_REF}" \
-              --revision-suffix "${REV_SUFFIX}" \
-              --set-env-vars IMAGE_DIGEST="${IMAGE_DIGEST}"
-          }
+          # shellcheck source=scripts/azure-naming.sh
+          source scripts/azure-naming.sh
+          set_htmlpdf_naming "${{ github.event.inputs.environment }}" "${{ github.event.inputs.location }}"
+          APP_NAME="${CONTAINER_APP_NAME}"
+          RESOURCE_GROUP="${RESOURCE_GROUP_NAME}"
 
-          deploy_one "export-html-pdf" "claimtouch-production"
-          deploy_one "ct-cta-prod-htmlpdf-eus" "ct-cta-prod-rg-eus"
+          echo "Deploying ${DIGEST_REF} to $APP_NAME in $RESOURCE_GROUP (revision: ${REV_SUFFIX})"
+
+          az containerapp update \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "${DIGEST_REF}" \
+            --revision-suffix "${REV_SUFFIX}" \
+            --set-env-vars VERSION="${VERSION}" IMAGE_DIGEST="${IMAGE_DIGEST}" NODE_ENV=production PORT=2305
+
+          echo "Active revision(s):"
+          az containerapp revision list -g "$RESOURCE_GROUP" -n "$APP_NAME" \
+            --query "[?properties.active==\`true\`].[name,properties.template.containers[0].image]" -o tsv
